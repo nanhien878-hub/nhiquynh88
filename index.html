@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>BOT GÀ CON 4.6 PRO MAX MAX</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        :root { --neon: #00ff66; --danger: #ff4444; --bg: #000; }
+        body { background: var(--bg); color: var(--neon); font-family: 'Courier New', monospace; margin: 0; padding: 10px; }
+        .app { max-width: 450px; margin: auto; border: 2px solid var(--neon); padding: 15px; box-shadow: 0 0 15px rgba(0,255,102,0.2); }
+        .header { text-align: center; border-bottom: 2px solid var(--neon); padding-bottom: 10px; margin-bottom: 15px; }
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 12px; margin-bottom: 15px; }
+        .box { border: 1px solid var(--neon); padding: 10px; margin-bottom: 10px; background: rgba(0,255,102,0.05); }
+        .bet-box { border: 2px dashed var(--neon); text-align: center; padding: 15px; margin: 15px 0; }
+        .bet-val { font-size: 24px; font-weight: bold; color: #fff; text-shadow: 0 0 10px var(--neon); }
+        .room-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 10px; }
+        .room-btn { border: 1px solid var(--neon); padding: 15px; text-align: center; cursor: pointer; transition: 0.3s; }
+        .room-btn.active { background: var(--neon); color: #000; font-weight: bold; }
+        .btn-action { width: 100%; padding: 15px; margin-top: 10px; background: var(--bg); border: 2px solid var(--neon); color: var(--neon); font-weight: bold; cursor: pointer; }
+        .btn-action:hover { background: var(--neon); color: #000; }
+        .danger-text { color: var(--danger); border-color: var(--danger) !important; }
+        .heatmap { margin-top: 15px; font-size: 11px; }
+        .bar { height: 10px; background: var(--neon); margin-bottom: 5px; transition: width 0.5s; }
+        .log-box { height: 100px; overflow-y: auto; font-size: 11px; border: 1px solid #333; padding: 5px; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="app">
+    <div class="header">
+        <h2 style="margin:0">🤖 GÀ CON 4.6 PRO MAX MAX</h2>
+        <small id="deviceId"></small>
+    </div>
+
+    <div class="stats-grid">
+        <div class="box">VỐN: <span id="balance" style="color:#fff">$1000</span></div>
+        <div class="box">THẮNG/THUA: <span id="winLoss">0/0</span></div>
+        <div class="box">CHUỖI: <span id="streak">0</span></div>
+        <div class="box">HỌC: <span id="dataCount">0/500</span></div>
+    </div>
+
+    <div id="safeModeMsg" style="display:none; color:var(--danger); text-align:center; font-weight:bold; margin-bottom:10px;">
+        ⛔ SAFE MODE KÍCH HOẠT - NGHỈ ĐỂ BẢO VỆ VỐN!
+    </div>
+
+    <div class="box" id="aiStatus">
+        <div>🧠 AI DỰ BÁO SÁT THỦ: <span id="predKiller" style="color:var(--danger); font-weight:bold">ĐANG DÒ...</span></div>
+        <div style="font-size:11px; margin-top:5px;">🛡️ ĐỘ TIN CẬY: <span id="confidence">0%</span></div>
+    </div>
+
+    <div class="bet-box">
+        <div style="font-size:12px">LỆNH SÁT THỦ (2% VỐN)</div>
+        <div id="suggestedStake" class="bet-val">$20.00</div>
+        <div id="strategy" style="font-size:11px; margin-top:5px; color:#aaa">CHIẾN THUẬT: ĐANG TÍNH...</div>
+    </div>
+
+    <div class="heatmap" id="heatmap"></div>
+
+    <div style="margin-top:15px;">
+        <label style="font-size:12px">HÔM NAY SẾP VÀO:</label>
+        <select id="killerMode" class="btn-action" onchange="resetRooms()">
+            <option value="1">🐔 Gà (Né 1 - Sát thủ vào 1)</option>
+            <option value="2">🐍 Rắn (Né 2 - Sát thủ vào 2)</option>
+            <option value="4">⚡ Thần Sấm (Né 4 - Sát thủ vào 4)</option>
+        </select>
+    </div>
+
+    <div class="room-grid" id="roomGrid"></div>
+
+    <button class="btn-action" onclick="saveRound()">XÁC NHẬN KẾT QUẢ</button>
+    <button class="btn-action danger-text" onclick="resetData()" style="margin-top:20px;">RESET BIG DATA 500</button>
+
+    <div class="log-box" id="logBox">📜 NHẬT KÝ HỆ THỐNG...</div>
+</div>
+
+<script>
+    const ROOMS = ["AN TOÀN", "MAY MẮN", "TỬ THẦN", "BÍ ẨN", "MẠO HIỂM"];
+    let db = JSON.parse(localStorage.getItem('gacon_pro_max')) || {
+        history: [], balance: 1000, win: 0, lose: 0, streak: 0, lastMode: 'win'
+    };
+
+    function updateUI() {
+        document.getElementById('balance').innerText = `$${db.balance.toFixed(2)}`;
+        document.getElementById('winLoss').innerText = `${db.win}/${db.lose}`;
+        document.getElementById('streak').innerText = `${db.streak} (${db.lastMode})`;
+        document.getElementById('dataCount').innerText = `${db.history.length}/500`;
+        document.getElementById('suggestedStake').innerText = `$${(db.balance * 0.02).toFixed(2)}`;
+        document.getElementById('deviceId').innerText = `ID: DEV-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+        
+        analyze();
+        drawHeatmap();
+    }
+
+    function resetRooms() {
+        const grid = document.getElementById('roomGrid');
+        grid.innerHTML = '';
+        ROOMS.forEach(r => {
+            const div = document.createElement('div');
+            div.className = 'room-btn';
+            div.innerText = r;
+            div.onclick = () => div.classList.toggle('active');
+            grid.appendChild(div);
+        });
+    }
+
+    function analyze() {
+        const history = db.history;
+        if (history.length < 5) {
+            document.getElementById('predKiller').innerText = "CHỜ DỮ LIỆU...";
+            return;
+        }
+
+        // Safe Mode logic
+        const safeMode = (db.lastMode === 'lose' && db.streak >= 4) || (db.lastMode === 'win' && db.streak >= 7);
+        document.getElementById('safeModeMsg').style.display = safeMode ? 'block' : 'none';
+
+        // Deep Pattern Matching (Chuỗi 3)
+        const pattern = history.slice(-3);
+        let predictions = [];
+        for (let i = 0; i < history.length - 4; i++) {
+            if (JSON.stringify(history.slice(i, i + 3)) === JSON.stringify(pattern)) {
+                predictions.push(history[i + 3]);
+            }
+        }
+
+        let bestPick = "";
+        let conf = 0;
+
+        if (predictions.length > 0) {
+            const counts = predictions.reduce((a, b) => (a[b] = (a[b] || 0) + 1, a), {});
+            bestPick = Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b);
+            conf = Math.round((counts[bestPick] / predictions.length) * 100);
+        } else {
+            // Nếu cầu lạ, dùng mật độ nổ cao nhất để cảnh báo né
+            const counts = history.slice(-50).reduce((a, b) => (a[b] = (a[b] || 0) + 1, a), {});
+            bestPick = Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b) || ROOMS[0];
+            conf = 35;
+        }
+
+        document.getElementById('predKiller').innerText = bestPick;
+        document.getElementById('confidence').innerText = conf + "%";
+        document.getElementById('strategy').innerText = `TÌNH TRẠNG: ${conf > 70 ? 'CẦU CỰC NÉT - CHỐT HẠ' : 'CẦU BIẾN ĐỘNG - THẬN TRỌNG'}`;
+    }
+
+    function drawHeatmap() {
+        const heatmap = document.getElementById('heatmap');
+        heatmap.innerHTML = '<b>🕵️ MẬT ĐỘ SÁT THỦ (GẦN ĐÂY):</b><br>';
+        const recent = db.history.slice(-100);
+        ROOMS.forEach(r => {
+            const count = recent.filter(x => x === r).length;
+            const pct = recent.length ? (count / recent.length * 100) : 0;
+            heatmap.innerHTML += `
+                <div style="margin-bottom:5px">
+                    ${r} (${pct.toFixed(0)}%)
+                    <div class="bar" style="width: ${pct}%"></div>
+                </div>`;
+        });
+    }
+
+    function saveRound() {
+        const selected = Array.from(document.querySelectorAll('.room-btn.active')).map(el => el.innerText);
+        const mode = parseInt(document.getElementById('killerMode').value);
+        
+        if (selected.length === 0) return alert("Sếp chưa chọn phòng nổ!");
+
+        // Giả sử phòng nổ thực tế là phòng đầu tiên sếp chọn (hoặc sếp chỉ chọn đúng 1 phòng nổ)
+        const actualKiller = selected[0]; 
+        
+        // Popup hỏi kết quả thực tế để tính tiền
+        const win = confirm(`KẾT QUẢ: Sát thủ thực tế ở phòng ${actualKiller}. Sếp có NÉ ĐƯỢC không?`);
+        
+        const stake = db.balance * 0.02;
+        if (win) {
+            const profit = (stake * 0.95) / (5 - mode);
+            db.balance += profit;
+            db.win++;
+            db.lastMode === 'win' ? db.streak++ : db.streak = 1;
+            db.lastMode = 'win';
+            log(`✅ THẮNG: +$${profit.toFixed(2)} | Sát thủ: ${actualKiller}`);
+        } else {
+            db.balance -= stake;
+            db.lose++;
+            db.lastMode === 'lose' ? db.streak++ : db.streak = 1;
+            db.lastMode = 'lose';
+            log(`❌ THUA: -$${stake.toFixed(2)} | Sát thủ: ${actualKiller}`);
+        }
+
+        db.history.push(actualKiller);
+        if (db.history.length > 500) db.history.shift();
+        
+        localStorage.setItem('gacon_pro_max', JSON.stringify(db));
+        resetRooms();
+        updateUI();
+    }
+
+    function log(msg) {
+        const lb = document.getElementById('logBox');
+        lb.innerHTML = `[${new Date().toLocaleTimeString()}] ${msg}<br>` + lb.innerHTML;
+    }
+
+    function resetData() {
+        if (confirm("XÓA SẠCH 500 VÁN DỮ LIỆU?")) {
+            localStorage.clear();
+            location.reload();
+        }
+    }
+
+    resetRooms();
+    updateUI();
+</script>
+</body>
+</html>
